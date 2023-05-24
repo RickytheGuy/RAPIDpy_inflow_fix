@@ -14,7 +14,8 @@ import traceback
 
 # external packages
 import pandas as pd
-import pangaea
+import xarray as xr
+
 from netCDF4 import Dataset
 import numpy as np
 
@@ -33,6 +34,139 @@ from ..utilities import (case_insensitive_file_search,
                          get_valid_directory_list,
                          partition)
 
+# -----------------------------------------------------------------------------
+# PANGAEA OPEN MFDATASET
+# -----------------------------------------------------------------------------
+def pangaea_open_mfdataset(path_to_lsm_files,
+                   lat_var,
+                   lon_var,
+                   time_var,
+                   lat_dim,
+                   lon_dim,
+                   time_dim,
+                   lon_to_180=False,
+                   coords_projected=False,
+                   loader=None,
+                   engine=None,
+                   autoclose=True):
+    """
+    Wrapper to open land surface model netcdf files
+    using :func:`xarray.open_mfdataset`.
+
+    .. warning:: The time dimension and variable will both be
+        renamed to 'time' to enable slicing.
+
+    Parameters
+    ----------
+    path_to_lsm_files: :obj:`str`
+        Path to land surface model files with wildcard.
+        (Ex. '/path/to/files/*.nc')
+    lat_var: :obj:`str`
+        Latitude variable (Ex. lat).
+    lon_var: :obj:`str`
+        Longitude variable (Ex. lon).
+    time_var: :obj:`str`
+        Time variable (Ex. time).
+    lat_dim: :obj:`str`
+        Latitude dimension (Ex. lat).
+    lon_dim: :obj:`str`
+        Longitude dimension (Ex. lon).
+    time_dim: :obj:`str`
+        Time dimension (ex. time).
+    lon_to_180: bool, optional, default=False
+        It True, will convert longitude from [0 to 360]
+        to [-180 to 180].
+    coords_projected: bool, optional, default=False
+        It True, it will assume the coordinates are already
+        in the projected coordinate system.
+    loader: str, optional, default=None
+        If 'hrrr', it will load in the HRRR dataset.
+    engine: str, optional
+        See: :func:`xarray.open_mfdataset` documentation.
+    autoclose: :obj:`str`, optional, default=True
+        If True, will use autoclose option with
+        :func:`xarray.open_mfdataset`.
+
+    Returns
+    -------
+    :func:`xarray.Dataset`
+
+
+    Read with pangaea example::
+
+        import numpy as np
+        import pandas as pd
+        import xarray as xr
+
+        with pa.pangaea_open_mfdataset('/path/to/ncfiles/*.nc',
+                               lat_var='lat',
+                               lon_var='lon',
+                               time_var='time',
+                               lat_dim='lat',
+                               lon_dim='lon',
+                               time_dim='time') as xds:
+            print(xds.lsm.projection)
+    """
+    def define_coords(xds):
+        """xarray loader to ensure coordinates are loaded correctly"""
+        # remove time dimension from lat, lon coordinates
+        if xds[lat_var].ndim == 3:
+            xds[lat_var] = xds[lat_var].squeeze(time_dim)
+        # make sure coords are defined as coords
+        if lat_var not in xds.coords \
+                or lon_var not in xds.coords \
+                or time_var not in xds.coords:
+            xds.set_coords([lat_var, lon_var, time_var],
+                           inplace=True)
+        return xds
+
+    def extract_hrrr_date(xds):
+        """xarray loader for HRRR"""
+        for var in xds.variables:
+            if 'initial_time' in xds[var].attrs.keys():
+                grid_time = pd.to_datetime(xds[var].attrs['initial_time'],
+                                           format="%m/%d/%Y (%H:%M)")
+                if 'forecast_time' in xds[var].attrs.keys():
+                    time_units = 'h'
+                    if 'forecast_time_units' in xds[var].attrs.keys():
+                        time_units = \
+                            str(xds[var].attrs['forecast_time_units'][0])
+                    time_dt = int(xds[var].attrs['forecast_time'][0])
+                    grid_time += np.timedelta64(time_dt, time_units)
+
+                return xds.assign(time=grid_time)
+        return xds
+
+    if loader == 'hrrr':
+        preprocess = extract_hrrr_date
+        engine = 'pynio' if engine is None else engine
+    else:
+        preprocess = define_coords
+
+    xds = xr.open_mfdataset(path_to_lsm_files,
+                            autoclose=autoclose,
+                            preprocess=preprocess,
+                            concat_dim=time_dim,
+                            engine=engine,
+                            )
+    xds.lsm.y_var = lat_var
+    xds.lsm.x_var = lon_var
+    xds.lsm.y_dim = lat_dim
+    xds.lsm.x_dim = lon_dim
+    xds.lsm.lon_to_180 = lon_to_180
+    xds.lsm.coords_projected = coords_projected
+
+    # make sure time dimensions are same for slicing
+    xds.rename(
+        {
+            time_dim: 'time',
+            time_var: 'time',
+        },
+        inplace=True
+    )
+
+    xds.lsm.to_datetime()
+    return xds
 
 # -----------------------------------------------------------------------------
 # MULTIPROCESSING FUNCTION
@@ -88,6 +222,67 @@ def generate_inflows_from_runoff(args):
         print("Time to convert inflows: {0}"
               .format(time_finish_ecmwf - time_start_all))
 
+def generate_inflows_from_runoff2(args):
+    """
+    prepare runoff inflow file for rapid
+    """
+    runoff_file_list = args[0]
+    file_index_list = args[1]
+    weight_table_file = args[2]
+    grid_type = args[3]
+    rapid_inflow_file = args[4]
+    rapid_inflow_tool = args[5]
+
+
+    # # # Split the file path into directory, base name, and extension
+    # directory, file_name = os.path.split(rapid_inflow_file)
+    # base_name, extension = os.path.splitext(file_name)
+
+    # # Insert the character before the extension
+    # new_file_name = base_name + f"_{loop_index}" + extension
+
+    # # Join the directory and the new file name to get the updated file path
+    # rapid_inflow_file = os.path.join(directory, new_file_name)
+
+    time_start_all = datetime.utcnow()
+
+    if not isinstance(runoff_file_list, list):
+        runoff_file_list = [runoff_file_list]
+    else:
+        runoff_file_list = runoff_file_list
+
+    if not isinstance(file_index_list, list):
+        file_index_list = [file_index_list]
+    else:
+        file_index_list = file_index_list
+    if runoff_file_list and file_index_list:
+        # prepare ECMWF file for RAPID
+        index_string = "Index: {0}".format(file_index_list[0])
+        if len(file_index_list) > 1:
+            index_string += " to {0}".format(file_index_list[-1])
+        print(index_string)
+        runoff_string = "File(s): {0}".format(runoff_file_list[0])
+        if len(runoff_file_list) > 1:
+            runoff_string += " to {0}".format(runoff_file_list[-1])
+        print(runoff_string)
+        print("Converting inflow ...")
+        try:
+            df = rapid_inflow_tool.execute2(nc_file_list=runoff_file_list,
+                                      index_list=file_index_list,
+                                      in_weight_table=weight_table_file,
+                                      out_nc=rapid_inflow_file,
+                                      grid_type=grid_type)
+        except Exception:
+            # This prints the type, value, and stack trace of the
+            # current exception being handled.
+            traceback.print_exc()
+            raise
+
+        time_finish_ecmwf = datetime.utcnow()
+        print("Time to convert inflows: {0}"
+              .format(time_finish_ecmwf - time_start_all))
+        
+        return df
 
 # -----------------------------------------------------------------------------
 # UTILITY FUNCTIONS
@@ -577,7 +772,7 @@ def determine_start_end_timestep(lsm_file_list,
                               file_datetime_pattern) \
             + timedelta(seconds=(file_size_time - 1) * time_step)
     else:
-        with pangaea.open_mfdataset(lsm_file_list,
+        with pangaea_open_mfdataset(lsm_file_list,
                                     lat_var=lsm_grid_info['latitude_var'],
                                     lon_var=lsm_grid_info['longitude_var'],
                                     time_var=lsm_grid_info['time_var'],
@@ -821,6 +1016,11 @@ def run_lsm_rapid_process(rapid_executable_location,
                                                  watershed_directory)
             rapid_directories.append(
                 (watershed_input_path, watershed_output_path))
+        ## Ricky
+        if not rapid_directories:
+            rapid_directories = [(os.path.join(rapid_io_files_location,
+                                                  'input'), os.path.join(rapid_io_files_location,
+                                                  'output'))]
     elif None not in (rapid_input_location, rapid_output_location):
         rapid_directories = [(rapid_input_location, rapid_output_location)]
     else:
@@ -951,10 +1151,24 @@ def run_lsm_rapid_process(rapid_executable_location,
                     r'rapid_connect\.csv'),
                 in_rivid_lat_lon_z_file=in_rivid_lat_lon_z_file,
                 land_surface_model_description=lsm_file_data['description'],
-                modeling_institution=modeling_institution
+                modeling_institution=modeling_institution,
+                loop_index = None
             )
-
-            job_combinations = []
+            #######
+            # df = lsm_file_data['rapid_inflow_tool'].generateOutputInflowFile2(
+            #     out_nc=master_rapid_runoff_file,
+            #     start_datetime_utc=actual_simulation_start_datetime,
+            #     number_of_timesteps=total_num_time_steps,
+            #     simulation_time_step_seconds=time_step,
+            #     in_rapid_connect_file=case_insensitive_file_search(
+            #         master_watershed_input_directory,
+            #         r'rapid_connect\.csv'),
+            #     in_rivid_lat_lon_z_file=in_rivid_lat_lon_z_file,
+            #     land_surface_model_description=lsm_file_data['description'],
+            #     modeling_institution=modeling_institution,
+            #     loop_index = None
+            # )
+            #######
             if (lsm_file_data['grid_type'] in ('nldas', 'lis', 'joules')) \
                     and convert_one_hour_to_three:
                 print("Grouping {0} in threes"
@@ -972,6 +1186,8 @@ def run_lsm_rapid_process(rapid_executable_location,
             partition_list, partition_index_list = \
                 partition(lsm_file_list, num_cpus)
 
+            job_combinations = []
+            job_combinations2 = []
             for loop_index, cpu_grouped_file_list in enumerate(partition_list):
                 if cpu_grouped_file_list and partition_index_list[loop_index]:
                     job_combinations.append((
@@ -982,6 +1198,13 @@ def run_lsm_rapid_process(rapid_executable_location,
                         master_rapid_runoff_file,
                         lsm_file_data['rapid_inflow_tool'],
                         mp_lock))
+                    job_combinations2.append((
+                        cpu_grouped_file_list,
+                        partition_index_list[loop_index],
+                        weight_table_file,
+                        lsm_file_data['grid_type'],
+                        master_rapid_runoff_file,
+                        lsm_file_data['rapid_inflow_tool']))
             #                   # COMMENTED CODE IS FOR DEBUGGING
             #                   generate_inflows_from_runoff((
             #                       cpu_grouped_file_list,
@@ -991,12 +1214,24 @@ def run_lsm_rapid_process(rapid_executable_location,
             #                       master_rapid_runoff_file,
             #                       lsm_file_data['rapid_inflow_tool'],
             #                       mp_lock))
-            pool = multiprocessing.Pool(num_cpus)
-            pool.map(generate_inflows_from_runoff,
-                     job_combinations)
-            pool.close()
-            pool.join()
 
+
+            # pool = multiprocessing.Pool(num_cpus)
+            # pool.map(generate_inflows_from_runoff2,
+            #          job_combinations2)
+            # pool.close()
+            # pool.join()
+            #generate_inflows_from_runoff2(job_combinations2)
+            with multiprocessing.Pool(num_cpus) as pool:
+                #pool.map(generate_inflows_from_runoff, job_combinations)
+                result = pool.map(generate_inflows_from_runoff2, job_combinations2)
+
+            dataset = Dataset(master_rapid_runoff_file, 'a')
+            for df in result:
+                for index in df.index:
+                    value = df.loc[index, 'm3_riv']
+                    dataset['m3_riv'][index] = value
+            dataset.close()
             # set up RAPID manager
             rapid_manager = RAPID(
                 rapid_executable_location=rapid_executable_location,
