@@ -1,8 +1,12 @@
 from RAPIDpy.inflow.lsm_rapid_process import run_lsm_rapid_process
 from datetime import datetime
-import xarray as xr
+# from netCDF4 import Dataset
 import numpy as np
 import cProfile
+#from glob import glob
+#import pandas as pd
+#import xarray as xr
+from time import time
 
 RAPID_EXE = '/Users/ricky/rapid'     # path to RAPID executable
 RAPIDIO_DIR = '/Users/ricky/Documents/rapidio/rapid'           # path to folder with RAPID input/output directories
@@ -29,6 +33,7 @@ if __name__ == "__main__":
         use_all_processors=True
     )
 
+
     # output = "/Users/ricky/Documents/rapidio/rapid/output/m3_riv_bas_era5_t720_24hr_19790101to19840101.nc"
     # validation = "/Users/ricky/Documents/rapidio/m3_riv_bas_era5_t720_24hr_19790101to19840101.nc"
 
@@ -41,5 +46,42 @@ if __name__ == "__main__":
     # v = vds['m3_riv'].values
     # v = v[~np.isnan(v)]
 
-    # print(o)
-    # print(v)
+    # print(o, len(o))
+    # print(v, len(v))
+    # ncs = glob("/Users/ricky/Documents/rapidio/ncs/19790*.nc")
+
+    # def read_loop():
+    #     df = pd.DataFrame(columns=['t'], index=range(len(ncs)))
+    #     i = 0
+    #     for nc_file in ncs: # 31271 function calls (31140 primitive calls) in 2.180 seconds
+    #         # Read the netcdf dataset
+    #         #data_in_nc = Dataset(nc_file)
+    #         data_in_nc = xr.open_dataset(nc_file)
+    #         inflow_data = data_in_nc.variables['ro'][:]
+    #         # get runoff dims
+    #         len_time_subset = 1
+    #         data_in_nc.close()
+
+    #         #df.loc[i, 'm3_riv'] = inflow_data[0][300]
+    #     return df
+
+    # def read_loop2(): # 3224793 function calls (3146754 primitive calls) in 1.566 seconds
+    #     df = pd.DataFrame(columns=['t'], index=range(len(ncs)))
+    #     i = 0
+    #     data_in_nc = xr.open_mfdataset(ncs)
+
+    #     inflow_data = data_in_nc.variables['ro'][:]
+    #     # get runoff dims
+    #     len_time_subset = 1
+    #     data_in_nc.close()
+
+    #         #df.loc[i, 'm3_riv'] = inflow_data[0][300]
+    #     return df
+
+    # #read_loop2()
+
+    # profiler = cProfile.Profile()
+    # profiler.enable()
+    # read_loop()
+    # profiler.disable()
+    # profiler.print_stats()
