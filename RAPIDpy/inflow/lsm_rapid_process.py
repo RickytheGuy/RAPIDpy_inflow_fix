@@ -232,6 +232,7 @@ def generate_inflows_from_runoff2(args):
     grid_type = args[3]
     rapid_inflow_file = args[4]
     rapid_inflow_tool = args[5]
+    mp_lock = args[6]
 
 
     # # # Split the file path into directory, base name, and extension
@@ -271,7 +272,8 @@ def generate_inflows_from_runoff2(args):
                                       index_list=file_index_list,
                                       in_weight_table=weight_table_file,
                                       out_nc=rapid_inflow_file,
-                                      grid_type=grid_type)
+                                      grid_type=grid_type,
+                                      mp_lock=mp_lock)
         except Exception:
             # This prints the type, value, and stack trace of the
             # current exception being handled.
@@ -1154,21 +1156,7 @@ def run_lsm_rapid_process(rapid_executable_location,
                 modeling_institution=modeling_institution,
                 loop_index = None
             )
-            #######
-            # df = lsm_file_data['rapid_inflow_tool'].generateOutputInflowFile2(
-            #     out_nc=master_rapid_runoff_file,
-            #     start_datetime_utc=actual_simulation_start_datetime,
-            #     number_of_timesteps=total_num_time_steps,
-            #     simulation_time_step_seconds=time_step,
-            #     in_rapid_connect_file=case_insensitive_file_search(
-            #         master_watershed_input_directory,
-            #         r'rapid_connect\.csv'),
-            #     in_rivid_lat_lon_z_file=in_rivid_lat_lon_z_file,
-            #     land_surface_model_description=lsm_file_data['description'],
-            #     modeling_institution=modeling_institution,
-            #     loop_index = None
-            # )
-            #######
+
             if (lsm_file_data['grid_type'] in ('nldas', 'lis', 'joules')) \
                     and convert_one_hour_to_three:
                 print("Grouping {0} in threes"
@@ -1204,7 +1192,8 @@ def run_lsm_rapid_process(rapid_executable_location,
                         weight_table_file,
                         lsm_file_data['grid_type'],
                         master_rapid_runoff_file,
-                        lsm_file_data['rapid_inflow_tool']))
+                        lsm_file_data['rapid_inflow_tool'],
+                        loop_index))
             #                   # COMMENTED CODE IS FOR DEBUGGING
             #                   generate_inflows_from_runoff((
             #                       cpu_grouped_file_list,
@@ -1221,17 +1210,16 @@ def run_lsm_rapid_process(rapid_executable_location,
             #          job_combinations2)
             # pool.close()
             # pool.join()
-            #generate_inflows_from_runoff2(job_combinations2)
-            with multiprocessing.Pool(num_cpus) as pool:
-                #pool.map(generate_inflows_from_runoff, job_combinations)
-                result = pool.map(generate_inflows_from_runoff2, job_combinations2)
 
-            dataset = Dataset(master_rapid_runoff_file, 'a')
-            for df in result:
-                for index in df.index:
-                    value = df.loc[index, 'm3_riv']
-                    dataset['m3_riv'][index] = value
-            dataset.close()
+            with multiprocessing.Pool(num_cpus) as pool:
+                pool.map(generate_inflows_from_runoff, job_combinations)
+                #pool.map(generate_inflows_from_runoff2, job_combinations2)
+
+            # dataset = Dataset(master_rapid_runoff_file, 'a')
+            # result = pd.concat(result)
+            # for index, value in result['m3_riv'].items():
+            #     dataset['m3_riv'][index] = value
+            # dataset.close()
             # set up RAPID manager
             rapid_manager = RAPID(
                 rapid_executable_location=rapid_executable_location,
