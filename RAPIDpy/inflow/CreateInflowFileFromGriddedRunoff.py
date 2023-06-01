@@ -658,7 +658,7 @@ class CreateInflowFileFromGriddedRunoff(object):
             mp_lock.release()
 
     def execute2(self, nc_file_list, index_list, in_weight_table,
-                out_nc, grid_type):
+                out_nc, grid_type,mp_lock):
 
         """The source code of the tool."""
         # if not os.path.exists(out_nc):
@@ -694,7 +694,18 @@ class CreateInflowFileFromGriddedRunoff(object):
         lat_slice = slice(min_lat_ind_all, max_lat_ind_all + 1)
         index_new = []
 
-        df = pd.DataFrame(columns=['m3_riv'])
+        #df = pd.DataFrame(columns=['m3_riv'], index=index_list)
+        # dataset = Dataset(os.path.join(os.path.dirname(out_nc),f'temp_{num}.nc'), 'w', format="NETCDF4")
+        # Define the dimensions
+        # time_dim = dataset.createDimension("time", None)
+        # lat_dim = dataset.createDimension("rivid", None)
+
+
+        # Create variables
+        # time_var = dataset.createVariable("time", "f4", ("time",))
+        # lat_var = dataset.createVariable("lat", "f4", ("lat",))
+        # lon_var = dataset.createVariable("lon", "f4", ("lon",))
+        # data_var = dataset.createVariable("m3_riv", "f4", ("time", "rivid"))
         # combine inflow data
         for nc_file_array_index, nc_file_array in enumerate(nc_file_list):
 
@@ -712,8 +723,7 @@ class CreateInflowFileFromGriddedRunoff(object):
                 data_in_nc = Dataset(nc_file)
 
                 # Calculate water inflows
-                runoff_dimension_size = \
-                    len(data_in_nc.variables[self.runoff_vars[0]].dimensions)
+                runoff_dimension_size = len(data_in_nc.variables[self.runoff_vars[0]].dimensions)
                 if runoff_dimension_size == 2:
                     # obtain subset of surface and subsurface runoff
                     data_subset_runoff = \
@@ -730,14 +740,15 @@ class CreateInflowFileFromGriddedRunoff(object):
                     len_lon_subset = data_subset_runoff.shape[1]
 
                     # reshape the runoff
-                    data_subset_runoff = data_subset_runoff.reshape(
-                        len_lat_subset * len_lon_subset)
+                    data_subset_runoff = data_subset_runoff.reshape((
+                        len_lat_subset * len_lon_subset))
 
                 elif runoff_dimension_size == 3:
                     # obtain subset of surface and subsurface runoff
                     data_subset_runoff = \
                         data_in_nc.variables[self.runoff_vars[0]][
                         :, lat_slice, lon_slice]
+
                     for var_name in self.runoff_vars[1:]:
                         data_subset_runoff += \
                             data_in_nc.variables[var_name][
@@ -749,9 +760,9 @@ class CreateInflowFileFromGriddedRunoff(object):
                     len_lon_subset = data_subset_runoff.shape[2]
                     # reshape the runoff
                     data_subset_runoff = \
-                        data_subset_runoff.reshape(
+                        data_subset_runoff.reshape((
                             len_time_subset,
-                            (len_lat_subset * len_lon_subset))
+                            len_lat_subset * len_lon_subset))
 
                 data_in_nc.close()
 
@@ -846,24 +857,17 @@ class CreateInflowFileFromGriddedRunoff(object):
 
                 pointer += npoints
 
+
             # only one process is allowed to write at a time to netcdf file
-            #mp_lock.acquire()
-            #data_out_nc = dataset
-            #data_out_nc = Dataset('in_memory_dataset','w', memory = True, diskless=True)
-
+            mp_lock.acquire()
+            data_out_nc = Dataset(out_nc, "a", format="NETCDF3_CLASSIC")
             if runoff_dimension_size == 3 and len_time_subset > 1:
-                raise "HERE"
-                #data_out_nc.variables['m3_riv'][
-                # a_slice = [index * len_time_subset:(index + 1) * len_time_subset, :] = \
-                #     inflow_data
-                # df['m3_riv'] = [
-                # index * len_time_subset:(index + 1) * len_time_subset, :] = \
-                #     inflow_data
-                df.loc[index, 'm3_riv'] = inflow_data
-
+                data_out_nc.variables['m3_riv'][
+                index * len_time_subset:(index + 1) * len_time_subset, :] = \
+                    inflow_data
             else:
-                df.loc[index, 'm3_riv'] = inflow_data
-                #data_out_nc.variables['m3_riv'][index] = inflow_data
-        return df
-            #data_out_nc.close()
-            #mp_lock.release()
+                data_out_nc.variables['m3_riv'][index] = inflow_data
+            data_out_nc.close()
+            mp_lock.release()
+        # return df
+        dataset.close()
