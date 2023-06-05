@@ -5,7 +5,7 @@ import numpy as np
 import cProfile
 #from glob import glob
 #import pandas as pd
-#import xarray as xr
+import xarray as xr
 from time import time
 
 RAPID_EXE = '/Users/ricky/rapid'     # path to RAPID executable
@@ -17,9 +17,9 @@ if __name__ == "__main__":
 
     run_lsm_rapid_process(
         rapid_executable_location=RAPID_EXE,
-        rapid_io_files_location=RAPIDIO_DIR,
-        # rapid_input_location='/Users/ricky/Documents/rapidio/rapid/input',
-        # rapid_output_location='/Users/ricky/Documents/rapidio/rapid/output',
+        #rapid_io_files_location=RAPIDIO_DIR,
+        rapid_file_location = '/Users/ricky/Documents/rapidio/rapid/input/test',
+        rapid_output_location='/Users/ricky/Documents/rapidio/rapid/output',
         lsm_data_location=LSM_DATA_DIR,
         simulation_start_datetime=datetime(1979, 1, 1),
         simulation_end_datetime=datetime(1984, 1, 1),
@@ -30,24 +30,27 @@ if __name__ == "__main__":
         generate_seasonal_averages_file=False,
         generate_seasonal_initialization_file=False,  # if you want to get seasonal init file from RAPID simulation
         generate_initialization_file=False,  # if you want to generate qinit file from end of RAPID simulation
-        use_all_processors=True
+        use_all_processors=True,
+        multiple_write = False # This is my new variable to toggle between default parallel processing (using the lock) and writing multiple files out
     )
 
 
-    # output = "/Users/ricky/Documents/rapidio/rapid/output/m3_riv_bas_era5_t720_24hr_19790101to19840101.nc"
-    # validation = "/Users/ricky/Documents/rapidio/m3_riv_bas_era5_t720_24hr_19790101to19840101.nc"
+    output = "/Users/ricky/Documents/rapidio/rapid/output/m3_riv_bas_era5_t720_24hr_19790101to19840101.nc"
+    validation = "/Users/ricky/Documents/rapidio/m3_riv_bas_era5_t720_24hr_19790101to19840101.nc"
 
-    # ods = xr.open_dataset(output)
-    # vds = xr.open_dataset(validation)
+    ods = xr.open_dataset(output)
+    vds = xr.open_dataset(validation)
     # print(ods)
     # print(vds)
-    # o = ods['m3_riv'].values
-    # o = o[~np.isnan(o)]
-    # v = vds['m3_riv'].values
-    # v = v[~np.isnan(v)]
+    o = ods['m3_riv'].values
+    o = o[~np.isnan(o)]
+    v = vds['m3_riv'].values
+    v = v[~np.isnan(v)]
 
-    # print(o, len(o))
-    # print(v, len(v))
+    print(o, len(o))
+    print(v, len(v))
+    ods.close()
+    vds.close()
     # ncs = glob("/Users/ricky/Documents/rapidio/ncs/19790*.nc")
 
     # def read_loop():
