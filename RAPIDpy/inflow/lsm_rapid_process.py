@@ -11,6 +11,7 @@ import multiprocessing
 import os
 import re
 import traceback
+import glob
 
 # external packages
 import pandas as pd
@@ -182,6 +183,20 @@ def generate_inflows_from_runoff(args):
     rapid_inflow_file = args[4]
     rapid_inflow_tool = args[5]
     mp_lock = args[6]
+    loop_index = args[7]
+    multiple_write = args[8]
+    og_inflow_file = args[9]
+
+    if multiple_write:
+        # Split the file path into directory, base name, and extension
+        directory, file_name = os.path.split(rapid_inflow_file)
+        base_name, extension = os.path.splitext(file_name)
+
+        # Insert the character before the extension
+        new_file_name = base_name + f"_{loop_index}" + extension
+
+        # Join the directory and the new file name to get the updated file path
+        rapid_inflow_file = os.path.join(directory, new_file_name)
 
     time_start_all = datetime.utcnow()
 
@@ -211,7 +226,9 @@ def generate_inflows_from_runoff(args):
                                       in_weight_table=weight_table_file,
                                       out_nc=rapid_inflow_file,
                                       grid_type=grid_type,
-                                      mp_lock=mp_lock)
+                                      mp_lock=mp_lock,
+                                      multiple_write=multiple_write,
+                                      og_nc=og_inflow_file)
         except Exception:
             # This prints the type, value, and stack trace of the
             # current exception being handled.
@@ -221,70 +238,6 @@ def generate_inflows_from_runoff(args):
         time_finish_ecmwf = datetime.utcnow()
         print("Time to convert inflows: {0}"
               .format(time_finish_ecmwf - time_start_all))
-
-def generate_inflows_from_runoff2(args):
-    """
-    prepare runoff inflow file for rapid
-    """
-    runoff_file_list = args[0]
-    file_index_list = args[1]
-    weight_table_file = args[2]
-    grid_type = args[3]
-    rapid_inflow_file = args[4]
-    rapid_inflow_tool = args[5]
-    mp_lock = args[6]
-
-
-    # # # Split the file path into directory, base name, and extension
-    # directory, file_name = os.path.split(rapid_inflow_file)
-    # base_name, extension = os.path.splitext(file_name)
-
-    # # Insert the character before the extension
-    # new_file_name = base_name + f"_{loop_index}" + extension
-
-    # # Join the directory and the new file name to get the updated file path
-    # rapid_inflow_file = os.path.join(directory, new_file_name)
-
-    time_start_all = datetime.utcnow()
-
-    if not isinstance(runoff_file_list, list):
-        runoff_file_list = [runoff_file_list]
-    else:
-        runoff_file_list = runoff_file_list
-
-    if not isinstance(file_index_list, list):
-        file_index_list = [file_index_list]
-    else:
-        file_index_list = file_index_list
-    if runoff_file_list and file_index_list:
-        # prepare ECMWF file for RAPID
-        index_string = "Index: {0}".format(file_index_list[0])
-        if len(file_index_list) > 1:
-            index_string += " to {0}".format(file_index_list[-1])
-        print(index_string)
-        runoff_string = "File(s): {0}".format(runoff_file_list[0])
-        if len(runoff_file_list) > 1:
-            runoff_string += " to {0}".format(runoff_file_list[-1])
-        print(runoff_string)
-        print("Converting inflow ...")
-        try:
-            df = rapid_inflow_tool.execute2(nc_file_list=runoff_file_list,
-                                      index_list=file_index_list,
-                                      in_weight_table=weight_table_file,
-                                      out_nc=rapid_inflow_file,
-                                      grid_type=grid_type,
-                                      mp_lock=mp_lock)
-        except Exception:
-            # This prints the type, value, and stack trace of the
-            # current exception being handled.
-            traceback.print_exc()
-            raise
-
-        time_finish_ecmwf = datetime.utcnow()
-        print("Time to convert inflows: {0}"
-              .format(time_finish_ecmwf - time_start_all))
-        
-        return df
 
 # -----------------------------------------------------------------------------
 # UTILITY FUNCTIONS
@@ -814,6 +767,7 @@ def determine_start_end_timestep(lsm_file_list,
 def run_lsm_rapid_process(rapid_executable_location,
                           lsm_data_location,
                           rapid_io_files_location=None,
+                          rapid_file_location=None,
                           rapid_input_location=None,
                           rapid_output_location=None,
                           simulation_start_datetime=None,
@@ -830,6 +784,7 @@ def run_lsm_rapid_process(rapid_executable_location,
                           generate_seasonal_initialization_file=False,
                           generate_initialization_file=False,
                           use_all_processors=True,
+                          multiple_write=False,
                           num_processors=1,
                           mpiexec_command="mpiexec",
                           cygwin_bin_location="",
@@ -850,6 +805,8 @@ def run_lsm_rapid_process(rapid_executable_location,
     rapid_io_files_location: str, optional
         Path to the directory containing the input and output folders for
         RAPID. This is for running multiple watersheds.
+    rapid_file_location :str, optional
+        Path to directory with RAPID input data (does not contain subdirectories; only data)
     rapid_input_location: str, optional
         Path to directory with RAPID simulation input data.
         Required if `rapid_io_files_location` is not set.
@@ -901,6 +858,9 @@ def run_lsm_rapid_process(rapid_executable_location,
     num_processors: int, optional
         If use_all_processors is False, this argument will determine the
         number of processors to use. Default is 1.
+    multiple_write: bool, optional
+        If true, multiple flow files will be written for each process and then 
+        combined at the end. Default is for all processes to write to one file.
     mpiexec_command: str, optional
         This is the command to execute RAPID. Default is "mpiexec".
     cygwin_bin_location: str, optional
@@ -1025,9 +985,12 @@ def run_lsm_rapid_process(rapid_executable_location,
                                                   'output'))]
     elif None not in (rapid_input_location, rapid_output_location):
         rapid_directories = [(rapid_input_location, rapid_output_location)]
+    elif rapid_file_location is not None:
+        rapid_directories = [(rapid_file_location, rapid_output_location)]
     else:
         raise ValueError("Need 'rapid_io_files_location' or "
-                         "'rapid_input_location' and 'rapid_output_location'"
+                         "'rapid_input_location' and 'rapid_output_location' or "
+                         "'rapid_file_location' and 'rapid_output_location'"
                          " set to continue.")
 
     all_output_file_information = []
@@ -1153,8 +1116,7 @@ def run_lsm_rapid_process(rapid_executable_location,
                     r'rapid_connect\.csv'),
                 in_rivid_lat_lon_z_file=in_rivid_lat_lon_z_file,
                 land_surface_model_description=lsm_file_data['description'],
-                modeling_institution=modeling_institution,
-                loop_index = None
+                modeling_institution=modeling_institution
             )
 
             if (lsm_file_data['grid_type'] in ('nldas', 'lis', 'joules')) \
@@ -1175,7 +1137,6 @@ def run_lsm_rapid_process(rapid_executable_location,
                 partition(lsm_file_list, num_cpus)
 
             job_combinations = []
-            job_combinations2 = []
             for loop_index, cpu_grouped_file_list in enumerate(partition_list):
                 if cpu_grouped_file_list and partition_index_list[loop_index]:
                     job_combinations.append((
@@ -1185,15 +1146,10 @@ def run_lsm_rapid_process(rapid_executable_location,
                         lsm_file_data['grid_type'],
                         master_rapid_runoff_file,
                         lsm_file_data['rapid_inflow_tool'],
-                        mp_lock))
-                    job_combinations2.append((
-                        cpu_grouped_file_list,
-                        partition_index_list[loop_index],
-                        weight_table_file,
-                        lsm_file_data['grid_type'],
-                        master_rapid_runoff_file,
-                        lsm_file_data['rapid_inflow_tool'],
-                        loop_index))
+                        mp_lock,
+                        loop_index,
+                        multiple_write,
+                        master_rapid_runoff_file))
             #                   # COMMENTED CODE IS FOR DEBUGGING
             #                   generate_inflows_from_runoff((
             #                       cpu_grouped_file_list,
@@ -1204,17 +1160,14 @@ def run_lsm_rapid_process(rapid_executable_location,
             #                       lsm_file_data['rapid_inflow_tool'],
             #                       mp_lock))
 
-
-            # pool = multiprocessing.Pool(num_cpus)
-            # pool.map(generate_inflows_from_runoff2,
-            #          job_combinations2)
-            # pool.close()
-            # pool.join()
-
             with multiprocessing.Pool(num_cpus) as pool:
                 pool.map(generate_inflows_from_runoff, job_combinations)
-                #pool.map(generate_inflows_from_runoff2, job_combinations2)
-
+               
+            if multiple_write:
+                datasets = glob.glob(f'{os.path.split(master_rapid_runoff_file)[0]}/*.nc')
+                datasets = [ds_file for ds_file in datasets if master_rapid_runoff_file not in ds_file]
+                ds = xr.open_mfdataset(datasets)
+                ds.to_netcdf(master_rapid_runoff_file)
             # dataset = Dataset(master_rapid_runoff_file, 'a')
             # result = pd.concat(result)
             # for index, value in result['m3_riv'].items():
