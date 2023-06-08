@@ -17,7 +17,7 @@ if __name__ == "__main__":
 
     run_lsm_rapid_process(
         rapid_executable_location=RAPID_EXE,
-        #rapid_io_files_location=RAPIDIO_DIR,
+        # rapid_io_files_location=RAPIDIO_DIR,
         rapid_file_location = '/Users/ricky/Documents/rapidio/rapid/input/test',
         rapid_output_location='/Users/ricky/Documents/rapidio/rapid/output',
         lsm_data_location=LSM_DATA_DIR,
