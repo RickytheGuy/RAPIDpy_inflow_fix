@@ -1068,7 +1068,7 @@ def run_lsm_rapid_process(rapid_executable_location,
             time_step *= 3
 
         # compile the file ending
-        out_file_ending = "{0}_{1}_{2}hr_{3:%Y%m%d}to{4:%Y%m%d}{5}" \
+        out_file_ending = "{0}_{1}_{2}hr_{3:%Y%m%d}_{4:%Y%m%d}{5}" \
             .format(lsm_file_data['model_name'],
                     lsm_file_data['grid_type'],
                     int(time_step / 3600),
