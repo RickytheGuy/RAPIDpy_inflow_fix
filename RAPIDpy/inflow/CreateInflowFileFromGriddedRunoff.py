@@ -307,7 +307,7 @@ class CreateInflowFileFromGriddedRunoff(object):
         pass
 
     def execute(self, nc_file_list, index_list, in_weight_table,
-                out_nc, grid_type, mp_lock, multiple_write, og_nc):
+                out_nc, grid_type, mp_lock, multiple_write = False, og_nc = None):
 
         """The source code of the tool."""
         if not os.path.exists(out_nc) and not multiple_write:
