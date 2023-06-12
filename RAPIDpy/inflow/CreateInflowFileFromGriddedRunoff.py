@@ -15,7 +15,7 @@ import pandas as pd
 from netCDF4 import Dataset
 import numpy as np
 from pytz import utc
-#from past.builtins import xrange  # pylint: disable=redefined-builtin
+# from past.builtins import xrange  # pylint: disable=redefined-builtin
 
 # local
 from ..helper_functions import open_csv
@@ -173,9 +173,10 @@ class CreateInflowFileFromGriddedRunoff(object):
 
         # Create output inflow netcdf data
         print("Generating inflow file ...")
-        data_out_nc = Dataset(out_nc, "w", format="NETCDF3_CLASSIC") 
+        data_out_nc = Dataset(out_nc, "w", format="NETCDF3_CLASSIC")
         #data_out_nc = Dataset(out_nc, 'w', parallel = True)
-        rivid_list = pd.read_csv(in_rapid_connect_file, dtype=int, header=None)[0].values
+        rivid_list = pd.read_csv(
+            in_rapid_connect_file, dtype=int, header=None)[0].values
         # create dimensions
         data_out_nc.createDimension('time', number_of_timesteps)
         data_out_nc.createDimension('rivid', len(rivid_list))
@@ -308,7 +309,6 @@ class CreateInflowFileFromGriddedRunoff(object):
 
     def execute(self, nc_file_list, index_list, in_weight_table,
                 out_nc, grid_type, mp_lock, multiple_write = False, og_nc = None):
-
         """The source code of the tool."""
         if not os.path.exists(out_nc) and not multiple_write:
             raise Exception("Outfile has not been created. "
@@ -332,7 +332,6 @@ class CreateInflowFileFromGriddedRunoff(object):
             for var_name, var in original_file.variables.items():
                 data_out_nc.createVariable(var_name, var.dtype, var.dimensions)
 
-
             # Copy global attributes from the original file to the in-memory dataset
             data_out_nc.setncatts(original_file.__dict__)
 
@@ -347,7 +346,7 @@ class CreateInflowFileFromGriddedRunoff(object):
         self.read_in_weight_table(in_weight_table)
 
         conversion_factor = self.get_conversion_factor(demo_file_list[0],
-                                                    len(demo_file_list))
+                                                       len(demo_file_list))
 
         # get indices of subset of data
         lon_ind_all = [int(i) for i in self.dict_list[self.header_wt[2]]]
@@ -405,11 +404,11 @@ class CreateInflowFileFromGriddedRunoff(object):
                     # obtain subset of surface and subsurface runoff
                     data_subset_runoff = \
                         data_in_nc.variables[self.runoff_vars[0]][
-                        :, lat_slice, lon_slice]
+                            :, lat_slice, lon_slice]
                     for var_name in self.runoff_vars[1:]:
                         data_subset_runoff += \
                             data_in_nc.variables[var_name][
-                            :, lat_slice, lon_slice]
+                                :, lat_slice, lon_slice]
 
                     # get runoff dims
                     len_time_subset = data_subset_runoff.shape[0]
@@ -471,8 +470,8 @@ class CreateInflowFileFromGriddedRunoff(object):
 
                 area_sqm_npoints = \
                     np.array([float(k) for k in
-                            self.dict_list[self.header_wt[1]][
-                            pointer: (pointer + npoints)]])
+                              self.dict_list[self.header_wt[1]][
+                        pointer: (pointer + npoints)]])
 
                 # assume data is incremental
                 if runoff_dimension_size == 3:
@@ -501,7 +500,7 @@ class CreateInflowFileFromGriddedRunoff(object):
 
                 else:
                     ro_stream = data_goal * area_sqm_npoints * \
-                                conversion_factor
+                        conversion_factor
 
                 # filter nan
                 ro_stream[np.isnan(ro_stream)] = 0
@@ -520,7 +519,7 @@ class CreateInflowFileFromGriddedRunoff(object):
                 data_out_nc = Dataset(out_nc, "a", format="NETCDF3_CLASSIC")
                 if runoff_dimension_size == 3 and len_time_subset > 1:
                     data_out_nc.variables['m3_riv'][
-                    index * len_time_subset:(index + 1) * len_time_subset, :] = \
+                        index * len_time_subset:(index + 1) * len_time_subset, :] = \
                         inflow_data
                 else:
                     data_out_nc.variables['m3_riv'][index] = inflow_data
@@ -529,11 +528,10 @@ class CreateInflowFileFromGriddedRunoff(object):
             else:
                 if runoff_dimension_size == 3 and len_time_subset > 1:
                     data_out_nc.variables['m3_riv'][
-                    index * len_time_subset:(index + 1) * len_time_subset, :] = \
+                        index * len_time_subset:(index + 1) * len_time_subset, :] = \
                         inflow_data
                 else:
                     data_out_nc.variables['m3_riv'][index] = inflow_data
 
         if multiple_write:
             data_out_nc.close()
-            
