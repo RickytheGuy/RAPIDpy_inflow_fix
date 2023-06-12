@@ -38,18 +38,20 @@ from ..utilities import (case_insensitive_file_search,
 # -----------------------------------------------------------------------------
 # PANGAEA OPEN MFDATASET
 # -----------------------------------------------------------------------------
+
+
 def pangaea_open_mfdataset(path_to_lsm_files,
-                   lat_var,
-                   lon_var,
-                   time_var,
-                   lat_dim,
-                   lon_dim,
-                   time_dim,
-                   lon_to_180=False,
-                   coords_projected=False,
-                   loader=None,
-                   engine=None,
-                   autoclose=True):
+                           lat_var,
+                           lon_var,
+                           time_var,
+                           lat_dim,
+                           lon_dim,
+                           time_dim,
+                           lon_to_180=False,
+                           coords_projected=False,
+                           loader=None,
+                           engine=None,
+                           autoclose=True):
     """
     Wrapper to open land surface model netcdf files
     using :func:`xarray.open_mfdataset`.
@@ -172,6 +174,8 @@ def pangaea_open_mfdataset(path_to_lsm_files,
 # -----------------------------------------------------------------------------
 # MULTIPROCESSING FUNCTION
 # -----------------------------------------------------------------------------
+
+
 def generate_inflows_from_runoff(args):
     """
     prepare runoff inflow file for rapid
@@ -238,6 +242,7 @@ def generate_inflows_from_runoff(args):
         time_finish_ecmwf = datetime.utcnow()
         print("Time to convert inflows: {0}"
               .format(time_finish_ecmwf - time_start_all))
+
 
 # -----------------------------------------------------------------------------
 # UTILITY FUNCTIONS
@@ -647,7 +652,7 @@ def identify_lsm_grid(lsm_grid_path):
                     longitude_var,
                     surface_runoff_var,
                     subsurface_runoff_var,
-                )
+            )
         else:
             lsm_example_file.close()
             raise Exception("Unsupported LSM grid.")
@@ -663,7 +668,7 @@ def identify_lsm_grid(lsm_grid_path):
                 latitude_var,
                 longitude_var,
                 runoff_vars,
-            )
+        )
 
     return lsm_file_data
 
@@ -711,7 +716,7 @@ def determine_start_end_timestep(lsm_file_list,
                 int((datetime.strptime(
                     file_re_match.search(lsm_file_list[1]).group(0),
                     file_datetime_pattern) -
-                     actual_simulation_start_datetime).total_seconds()
+                    actual_simulation_start_datetime).total_seconds()
                     / float(file_size_time))
 
         elif expected_time_step is not None:
@@ -978,11 +983,11 @@ def run_lsm_rapid_process(rapid_executable_location,
                                                  watershed_directory)
             rapid_directories.append(
                 (watershed_input_path, watershed_output_path))
-        ## Ricky
+        # Ricky
         if not rapid_directories:
             rapid_directories = [(os.path.join(rapid_io_files_location,
-                                                  'input'), os.path.join(rapid_io_files_location,
-                                                  'output'))]
+                                               'input'), os.path.join(rapid_io_files_location,
+                                                                      'output'))]
     elif None not in (rapid_input_location, rapid_output_location):
         rapid_directories = [(rapid_input_location, rapid_output_location)]
     elif rapid_file_location is not None:
@@ -1162,10 +1167,12 @@ def run_lsm_rapid_process(rapid_executable_location,
 
             with multiprocessing.Pool(num_cpus) as pool:
                 pool.map(generate_inflows_from_runoff, job_combinations)
-               
+
             if multiple_write:
-                datasets = glob.glob(f'{os.path.split(master_rapid_runoff_file)[0]}/*.nc')
-                datasets = [ds_file for ds_file in datasets if master_rapid_runoff_file not in ds_file]
+                datasets = glob.glob(
+                    f'{os.path.split(master_rapid_runoff_file)[0]}/*.nc')
+                datasets = [
+                    ds_file for ds_file in datasets if master_rapid_runoff_file not in ds_file]
                 ds = xr.open_mfdataset(datasets)
                 ds.to_netcdf(master_rapid_runoff_file)
             # dataset = Dataset(master_rapid_runoff_file, 'a')
